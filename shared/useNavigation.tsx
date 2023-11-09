@@ -1,6 +1,6 @@
 import { useRouter as usePagesRouter } from "next/compat/router";
 import { NextRouter } from "next/router";
-import { useParams, usePathname, useSearchParams } from "next/navigation";
+import { useParams, usePathname, useSearchParams, useSelectedLayoutSegments } from "next/navigation";
 import querystring, { ParsedUrlQuery } from "querystring";
 import {
     useCallback,
@@ -15,10 +15,49 @@ import mitt from "next/dist/shared/lib/mitt";
 import {
     AppRouterContext,
     AppRouterInstance,
+    GlobalLayoutRouterContext,
 } from "next/dist/shared/lib/app-router-context.shared-runtime";
+import { FlightRouterState } from "next/dist/server/app-render/types";
+
 
 type RouteChangeEvents = readonly ["routeChanged"];
 type RouteChangeEventType = RouteChangeEvents[number];
+
+// TODO-APP: handle parallel routes
+/**
+ * Get the canonical parameters from the current level to the leaf node.
+ */
+function getSelectedLayoutSegmentPath(
+    tree: FlightRouterState,
+    parallelRouteKey: string,
+    first = true,
+    segmentPath: string[] = []
+  ): string[] {
+    let node: FlightRouterState
+    if (first) {
+      // Use the provided parallel route key on the first parallel route
+      node = tree[1][parallelRouteKey]
+    } else {
+      // After first parallel route prefer children, if there's no children pick the first parallel route.
+      const parallelRoutes = tree[1]
+      node = parallelRoutes.children ?? Object.values(parallelRoutes)[0]
+    }
+  
+    if (!node) return segmentPath
+    const segment = node[0]
+  
+    const segmentValue = Array.isArray(segment) ? `[${segment[0]}]` : segment
+    if (!segmentValue || segmentValue.startsWith('__PAGE__')) return segmentPath
+  
+    segmentPath.push(segmentValue)
+  
+    return getSelectedLayoutSegmentPath(
+      node,
+      parallelRouteKey,
+      false,
+      segmentPath
+    )
+  }
 
 function extractVariablesFromUrl(
     template: string,
@@ -55,6 +94,14 @@ function extractVariablesFromUrl(
 
     return result;
 }
+
+/// THE PROBLEM WITH REWRITING AND useNavigation
+//      The routing data that it is retrieving and manipulating on the server is 
+//      different than that which is coming from the client.  This is because the
+//      client is using data that is available to it in the browser.  By the time
+//      it gets to the client, the routing data has been rewritten.  This means
+//      that the client is using the rewritten data and the server is using the
+//      original data. 
 
 export interface NavigationObject {
     /**
@@ -136,7 +183,9 @@ export interface NavigationObject {
  * 				router this will return the value of `usePathname` which is actually the path as it appears to the browser.
  * @returns
  */
-export default function useNavigation(): NavigationObject {
+export default function useNavigation(): NavigationObject | null {
+    const [navObject, setNavObject] = useState<NavigationObject|null>(null)
+    const globalLayoutRouter = useContext(GlobalLayoutRouterContext)
     const pagesRouter = usePagesRouter();
     const appRouter = useContext(AppRouterContext);
     const appRouterDynamicSegments = useParams();
@@ -153,11 +202,14 @@ export default function useNavigation(): NavigationObject {
     //	post-interpolated version of the path.  For example, if the path is /route/[id]/[name] and the URL is
     //	/route/123/foo then the router object's pathname will be /route/[id]/[name] and this pathname will be
     //	/route/123/foo.
-    const appRouterPathname = usePathname() || null;
+    const appRouterPathname = isAppRoute && globalLayoutRouter ? `/${getSelectedLayoutSegmentPath(globalLayoutRouter.tree, 'children').join('/')}` : null
     const pagesRouterPathname = pagesRouter?.pathname || null;
 
+    const pagesRouterAsPath = pagesRouter?.asPath
+    const appRouterAsPath = usePathname()
+
     const pathname = isPagesRoute ? pagesRouterPathname : appRouterPathname;
-    const asPath = isPagesRoute ? pagesRouter?.asPath : appRouterPathname;
+    const asPath = isPagesRoute ? pagesRouterAsPath : appRouterAsPath;
 
     // This block will prepare the query and dynamic segment parameters.  Note that this will handle differentiate
     //	the dynamic segments from query parameters.  It will also identify the searchParams segment and merge it
@@ -325,22 +377,31 @@ export default function useNavigation(): NavigationObject {
         return asPath;
     }, [asPath, isRewrittenUrl, userFacingPath, userFacingQueryParams]);
 
-    return {
-        asPath,
-        isPagesRoute,
-        isAppRoute,
-        isRewrittenUrl,
-        appRouter,
-        pagesRouter,
-        pathname,
-        dynamicSegments,
-        queryAsParsedUrlQuery,
-        query: queryAsParsedUrlQuery,
-        queryAsUrlSearchParams,
-        userFacingPath,
-        userFacingQueryParams,
-        push,
-        replace,
-        getUserFacingAsPath,
-    };
+    // Why is this useEffect here?
+    //  We want to guarantee that this hook is only returning meaninful 
+    //  information when executing on the client.  useEffect is a way to 
+    //  ensure that this happens since useEffects are never executed on the 
+    //  server.
+    useEffect(() => {
+        setNavObject({
+            asPath,
+            isPagesRoute,
+            isAppRoute,
+            isRewrittenUrl,
+            appRouter,
+            pagesRouter,
+            pathname,
+            dynamicSegments,
+            queryAsParsedUrlQuery,
+            query: queryAsParsedUrlQuery,
+            queryAsUrlSearchParams,
+            userFacingPath,
+            userFacingQueryParams,
+            push,
+            replace,
+            getUserFacingAsPath,
+        })
+    }, [appRouter, asPath, dynamicSegments, getUserFacingAsPath, isAppRoute, isPagesRoute, isRewrittenUrl, pagesRouter, pathname, push, queryAsParsedUrlQuery, queryAsUrlSearchParams, replace, userFacingPath, userFacingQueryParams])
+
+    return navObject
 }

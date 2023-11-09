@@ -1,29 +1,85 @@
+import React from "react";
 
-const HEIGHT="350px"
+const HEIGHT = "350px";
 
-const PAGE = [
-  "/pages-router/non-dynamic/client",
-  "/pages-router/non-dynamic/static",
-  "/pages-router/dynamic/1/client",
-  "/pages-router/dynamic/1/static"
-]
+const frameTree = {
+    "Pages Router": {
+        "Non-Dynamic": {
+            Direct: {
+                Client: "/pages-router/non-dynamic/client",
+                Static: "/pages-router/non-dynamic/static",
+            },
+            Rewritten: {
+                Client: "/pages-router/rewritten/non-dynamic/client",
+                Server: "/pages-router/rewritten/non-dynamic/static",
+            },
+        },
+        Dynamic: {
+            Direct: {
+                Client: "/pages-router/dynamic/1/client",
+                Static: "/pages-router/dynamic/1/static",
+            },
+            Rewritten: {
+                Client: "/pages-router/rewritten/dynamic/1/client",
+                Server: "/pages-router/rewritten/dynamic/1/static",
+            },
+        },
+    },
+    "App Router": {
+        "Non-Dynamic": {
+            Direct: {
+                Server: "/app-router/non-dynamic/server",
+            },
+            Rewritten: {
+                Server: "/app-router/rewritten/non-dynamic/server",
+            },
+        },
+        Dynamic: {
+            Direct: {
+                Server: "/app-router/dynamic/1/server",
+            },
+            Rewritten: {
+                Server: "/app-router/rewritten/dynamic/1/server",
+            },
+        },
+    },
+} satisfies Tree;
 
-const APP = [
-  "/app-router/dynamic/1/server",
-  "/app-router/non-dynamic/server",
-]
+interface Tree {
+    [key: string]: Tree | string;
+}
 
-export default function NavigationHome () {
-  return (
-    <>
-      <h2>Pages Router</h2>      
-      <div className="grid grid-cols-4 gap-4">
-          {PAGE.map((page) => (<div key={page}><iframe src={page} height={HEIGHT} className="bg-white"/></div>))}      
-          </div>
-      <h2>App Router</h2>
-      <div className="grid grid-cols-4 gap-4">
-        {APP.map((page) => (<div key={page}><iframe src={page} height={HEIGHT} className="bg-white"/></div>))}      
-        </div>
-    </>
-  )
+function getPages(tree: Tree, level = 0): React.ReactNode[] {
+    let pages: React.ReactNode[] = [];
+    for (const [key, value] of Object.entries(tree)) {
+        if (typeof value === "object") {
+            const header =
+                level === 0 ? (
+                    <h2 className="text-xl font-bold border-b-2 border-color-black">{key}</h2>
+                ) : level === 1 ? (
+                    <h3  className="text-lg font-bold">{key}</h3>
+                ) : (
+                    <h4 className="text-base font-bold">{key}</h4>
+                );
+            const container = (
+                <div
+                    key={key}
+                    className="p-3"
+                >
+                    {header}
+                    <div className="grid grid-flow-col auto-cols-max">{...getPages(value, level + 1)}</div>
+                </div>
+            );
+            pages.push(container);
+        } else {
+            pages.push(
+                <iframe src={value} height={HEIGHT} className="bg-white" />,
+            );
+        }
+    }
+    return pages;
+}
+
+export default function NavigationHome() {
+    return <div className="grid">{getPages(frameTree)}</div>;
 }
