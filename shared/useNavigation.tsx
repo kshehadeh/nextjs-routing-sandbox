@@ -1,6 +1,11 @@
 import { useRouter as usePagesRouter } from "next/compat/router";
 import { NextRouter } from "next/router";
-import { useParams, usePathname, useSearchParams, useSelectedLayoutSegments } from "next/navigation";
+import {
+    useParams,
+    usePathname,
+    useSearchParams,
+    useSelectedLayoutSegments,
+} from "next/navigation";
 import querystring, { ParsedUrlQuery } from "querystring";
 import {
     useCallback,
@@ -19,7 +24,6 @@ import {
 } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { FlightRouterState } from "next/dist/server/app-render/types";
 
-
 type RouteChangeEvents = readonly ["routeChanged"];
 type RouteChangeEventType = RouteChangeEvents[number];
 
@@ -31,77 +35,47 @@ function getSelectedLayoutSegmentPath(
     tree: FlightRouterState,
     parallelRouteKey: string,
     first = true,
-    segmentPath: string[] = []
-  ): string[] {
-    let node: FlightRouterState
+    segmentPath: string[] = [],
+): string[] {
+    let node: FlightRouterState;
     if (first) {
-      // Use the provided parallel route key on the first parallel route
-      node = tree[1][parallelRouteKey]
+        // Use the provided parallel route key on the first parallel route
+        node = tree[1][parallelRouteKey];
     } else {
-      // After first parallel route prefer children, if there's no children pick the first parallel route.
-      const parallelRoutes = tree[1]
-      node = parallelRoutes.children ?? Object.values(parallelRoutes)[0]
+        // After first parallel route prefer children, if there's no children pick the first parallel route.
+        const parallelRoutes = tree[1];
+        node = parallelRoutes.children ?? Object.values(parallelRoutes)[0];
     }
-  
-    if (!node) return segmentPath
-    const segment = node[0]
-  
-    const segmentValue = Array.isArray(segment) ? `[${segment[0]}]` : segment
-    if (!segmentValue || segmentValue.startsWith('__PAGE__')) return segmentPath
-  
-    segmentPath.push(segmentValue)
-  
+
+    if (!node) return segmentPath;
+    const segment = node[0];
+
+    const segmentValue = Array.isArray(segment) ? `[${segment[0]}]` : segment;
+    if (!segmentValue || segmentValue.startsWith("__PAGE__"))
+        return segmentPath;
+
+    segmentPath.push(segmentValue);
+
     return getSelectedLayoutSegmentPath(
-      node,
-      parallelRouteKey,
-      false,
-      segmentPath
-    )
-  }
+        node,
+        parallelRouteKey,
+        false,
+        segmentPath,
+    );
+}
 
-function extractVariablesFromUrl(
-    template: string,
-    url: string,
-): Record<string, string> {
+function extractVariablesFromUrl(template: string): string[] {
     // Find all the placeholders in the template
-    const placeholders = template.match(/\[([^\]]+)\]/g);
-
-    if (!placeholders) {
-        return {}
-    }
-
-    // Create a regex pattern based on the template
-    let regexPattern = template;
-    placeholders.forEach((ph) => {
-        regexPattern = regexPattern.replace(ph, "([^/]+)");
-    });
-    const regex = new RegExp(`^${regexPattern}$`);
-
-    // Match the url with the regex pattern
-    const match = url.match(regex);
-
-    // If no match is found, return an empty object
-    if (!match) {
-        return {};
-    }
-
-    // Construct the result object
-    const result: Record<string, string> = {};
-    placeholders.forEach((ph, index) => {
-        const key = ph.replace(/[\[\]]/g, ""); // Remove the brackets
-        result[key] = match[index + 1];
-    });
-
-    return result;
+    return Array.from(template.matchAll(/\[([^\]]+)\]/g)).map((m) => m[1]);
 }
 
 /// THE PROBLEM WITH REWRITING AND useNavigation
-//      The routing data that it is retrieving and manipulating on the server is 
+//      The routing data that it is retrieving and manipulating on the server is
 //      different than that which is coming from the client.  This is because the
 //      client is using data that is available to it in the browser.  By the time
 //      it gets to the client, the routing data has been rewritten.  This means
 //      that the client is using the rewritten data and the server is using the
-//      original data. 
+//      original data.
 
 export interface NavigationObject {
     /**
@@ -184,29 +158,32 @@ export interface NavigationObject {
  * @returns
  */
 export default function useNavigation(): NavigationObject | null {
-    const [navObject, setNavObject] = useState<NavigationObject|null>(null)
-    const globalLayoutRouter = useContext(GlobalLayoutRouterContext)
+    const [navObject, setNavObject] = useState<NavigationObject | null>(null);
+    const globalLayoutRouter = useContext(GlobalLayoutRouterContext);
     const pagesRouter = usePagesRouter();
     const appRouter = useContext(AppRouterContext);
     const appRouterDynamicSegments = useParams();
     const events = useRef<MittEmitter<RouteChangeEventType>>(mitt());
     const isPagesRoute = useMemo(() => !!pagesRouter, [pagesRouter]);
     const isAppRoute = useMemo(() => !isPagesRoute, [isPagesRoute]);
-
-    // This works with both app router and pages router  but will be undefined if the pages route isn't "ready"
     const readonlySearchParams = useSearchParams();
 
-    // This works with both app router and pages router  but will be undefined if the pages route isn't "ready"
-    //	Unfortunately, the pathname referred to here is different than the pathname property on the router object.
-    //	This is because the router object's pathname is the pre-interpolated version of the path.  This is the
-    //	post-interpolated version of the path.  For example, if the path is /route/[id]/[name] and the URL is
-    //	/route/123/foo then the router object's pathname will be /route/[id]/[name] and this pathname will be
-    //	/route/123/foo.
-    const appRouterPathname = isAppRoute && globalLayoutRouter ? `/${getSelectedLayoutSegmentPath(globalLayoutRouter.tree, 'children').join('/')}` : null
-    const pagesRouterPathname = pagesRouter?.pathname || null;
+    // There is no equivalent to the pages router's `pathname` property on the app router.  So we need to
+    //  calculate it ourselves.  This will be the path as it appears to the browser.  It might *seem* like
+    //  usePathname() is equivalent but this doesn't actually return the un-interpolated version of the path.
+    //  For example, if the path is /route/[id] and the id is 123 then usePathname() will return /route/123
+    //  but we want behavior that is consistent with the pages router which will return /route/[id].
+    const appRouterPathname =
+        isAppRoute && globalLayoutRouter
+            ? `/${getSelectedLayoutSegmentPath(
+                  globalLayoutRouter.tree,
+                  "children",
+              ).join("/")}`
+            : null;
+    const appRouterAsPath = usePathname();
 
-    const pagesRouterAsPath = pagesRouter?.asPath
-    const appRouterAsPath = usePathname()
+    const pagesRouterPathname = pagesRouter?.pathname || null;
+    const pagesRouterAsPath = pagesRouter?.asPath;
 
     const pathname = isPagesRoute ? pagesRouterPathname : appRouterPathname;
     const asPath = isPagesRoute ? pagesRouterAsPath : appRouterAsPath;
@@ -216,8 +193,8 @@ export default function useNavigation(): NavigationObject | null {
     //	with the query parameters (UA-specific)
     const [queryAsUrlSearchParams, queryAsParsedUrlQuery, dynamicSegments] =
         useMemo(() => {
-            let dynamicSegments: ParsedUrlQuery;
-            let parsedQuery;
+            let dynamicSegments: ParsedUrlQuery = {};
+            let parsedQuery: ParsedUrlQuery;
 
             // The query property is meant to be a backward compatibility shim for the queryAsParsedUrlQuery property.  Note
             //	that it can never be undefined or null so we need to default it to an empty object.  There are a couple of differences
@@ -236,13 +213,22 @@ export default function useNavigation(): NavigationObject | null {
             }
 
             // The dynamic segments are only easily available on the app router.  On the the pages router, they are merged
-			//	with the query parameters or not available at all.  So we need to extract them from the URL.
+            //	with the query parameters or not available at all.  So we need to extract them from the URL.
             if (pagesRouter?.pathname) {
-				dynamicSegments = extractVariablesFromUrl(pagesRouter.pathname, pagesRouter.asPath.split("?")[0])
-
-				for (const key of Object.keys(dynamicSegments)) {
-					delete parsedQuery[key];
-                } 
+                const dynamicSegmentsKeys = extractVariablesFromUrl(
+                    pagesRouter.pathname,
+                );
+                dynamicSegmentsKeys.forEach((k) => {
+                    if (k in parsedQuery) {
+                        // move from the query to the dynamic segments object
+                        dynamicSegments[k] = parsedQuery[k];
+                        delete parsedQuery[k];
+                    } else {
+                        console.warn(
+                            `Dynamic segment ${k} not found in query parameters`,
+                        );
+                    }
+                });
             } else {
                 dynamicSegments = appRouterDynamicSegments || {};
             }
@@ -378,9 +364,9 @@ export default function useNavigation(): NavigationObject | null {
     }, [asPath, isRewrittenUrl, userFacingPath, userFacingQueryParams]);
 
     // Why is this useEffect here?
-    //  We want to guarantee that this hook is only returning meaninful 
-    //  information when executing on the client.  useEffect is a way to 
-    //  ensure that this happens since useEffects are never executed on the 
+    //  We want to guarantee that this hook is only returning meaninful
+    //  information when executing on the client.  useEffect is a way to
+    //  ensure that this happens since useEffects are never executed on the
     //  server.
     useEffect(() => {
         setNavObject({
@@ -400,8 +386,24 @@ export default function useNavigation(): NavigationObject | null {
             push,
             replace,
             getUserFacingAsPath,
-        })
-    }, [appRouter, asPath, dynamicSegments, getUserFacingAsPath, isAppRoute, isPagesRoute, isRewrittenUrl, pagesRouter, pathname, push, queryAsParsedUrlQuery, queryAsUrlSearchParams, replace, userFacingPath, userFacingQueryParams])
+        });
+    }, [
+        appRouter,
+        asPath,
+        dynamicSegments,
+        getUserFacingAsPath,
+        isAppRoute,
+        isPagesRoute,
+        isRewrittenUrl,
+        pagesRouter,
+        pathname,
+        push,
+        queryAsParsedUrlQuery,
+        queryAsUrlSearchParams,
+        replace,
+        userFacingPath,
+        userFacingQueryParams,
+    ]);
 
-    return navObject
+    return navObject;
 }
