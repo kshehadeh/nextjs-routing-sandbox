@@ -1,11 +1,11 @@
-import ShowRouter from "@/components/shared/ShowRouter";
+import ShowPagesRouter from "@/components/shared/ShowPagesRouter";
 import { GetStaticPropsContext } from "next";
 import { PropsWithChildren } from "react";
 
 export default function PageWithDynamicSegment(
     props: PropsWithChildren<{ id: string }>,
 ) {
-    return <ShowRouter />;
+    return <ShowPagesRouter />;
 }
 
 export function getStaticPaths() {

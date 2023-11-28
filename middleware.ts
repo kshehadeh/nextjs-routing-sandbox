@@ -1,33 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Tree, frameTree } from "./lib/frame-tree";
 
-export default function handler (req: NextRequest) {
+function isObject(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object'
+}
 
-    // APP ROUTER
-    if (req.nextUrl.pathname.startsWith('/app-router/rewritten/dynamic/1/server')) {
-        return NextResponse.rewrite(`${req.nextUrl.origin}/app-router/dynamic/1/server`)
-    }
+function isString(value: unknown): value is string {
+    return typeof value === 'string'
+}
 
-    if (req.nextUrl.pathname.startsWith('/app-router/rewritten/non-dynamic/server')) {
-        return NextResponse.rewrite(`${req.nextUrl.origin}/app-router/non-dynamic/server`)
-    }
+export default function handler(req: NextRequest) {
 
-
-    // PAGES ROUTER
-    if (req.nextUrl.pathname.startsWith('/pages-router/rewritten/dynamic/1/client')) {
-        return NextResponse.rewrite(`${req.nextUrl.origin}/pages-router/dynamic/1/client`)
-    }
-
-    if (req.nextUrl.pathname.startsWith('/pages-router/rewritten/dynamic/1/static')) {
-        return NextResponse.rewrite(`${req.nextUrl.origin}/pages-router/dynamic/1/static`)
-    }
-
-    if (req.nextUrl.pathname.startsWith('/pages-router/rewritten/non-dynamic/client')) {
-        return NextResponse.rewrite(`${req.nextUrl.origin}/pages-router/non-dynamic/client`)
-    }
-
-    if (req.nextUrl.pathname.startsWith('/pages-router/rewritten/non-dynamic/static')) {
-        return NextResponse.rewrite(`${req.nextUrl.origin}/pages-router/non-dynamic/static`)
+    if (req.nextUrl.pathname.includes('/rewritten')) {
+        const rewrittenPath = req.nextUrl.pathname.replace('/rewritten', '')
+        return NextResponse.rewrite(`${req.nextUrl.origin}${rewrittenPath}`)
     }
 
     return NextResponse.next()
 }
+
+export const config = {
+    matcher: [
+      /*
+       * Match all request paths except for the ones starting with:
+       * - api (API routes)
+       * - _next/static (static files)
+       * - _next/image (image optimization files)
+       * - favicon.ico (favicon file)
+       */
+      '/((?!api|_next/static|_next/image|favicon.ico).*)',
+    ],
+  }
