@@ -3,7 +3,7 @@
 import { useRouter } from "next/router";
 import React from "react";
 
-export default function ShowPagesRouter({ serverUrl }: { serverUrl?: string}) {
+export default function ShowPagesRouter({ serverUrl }: Readonly<{ serverUrl?: string}>) {
     const routeInfo = useRouter();
 
     const [clientUrl, setClientUrl] = React.useState<string>();
