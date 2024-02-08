@@ -1,23 +1,20 @@
 import { Suspense } from "react";
-import DogBreedViewerClientComponent from "./components/DogBreedViewer.client";
+import DogBreedViewerClientComponent from "../components/DogBreedViewer.client";
+import { getBreeds } from "../server/breeds";
 
+async function DogBreedViewer() {
+    const breeds = await getBreeds(2);
+    if (!breeds) {
+        return <p>Failed to load breeds</p>;
+    }
 
+    return <DogBreedViewerClientComponent breeds={Object.keys(breeds.message)} />;
+}
 export default async function WithSuspenseServerComponent() {    
-    
-    const response = await fetch("https://dog.ceo/api/breeds/list/all")
-
-    if (!response.ok) {
-        return <p>Failed to load breeds</p>;
-    }
-
-    const breeds = await response.json();    
-    if (!breeds.message) {
-        return <p>Failed to load breeds</p>;
-    }
 
     return (
         <Suspense fallback={(<p>Loading breeds...</p>)}>
-            <DogBreedViewerClientComponent breeds={Object.keys(breeds.message)} />
+            <DogBreedViewer />
         </Suspense>
     );
 }
