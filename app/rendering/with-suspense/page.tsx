@@ -10,7 +10,7 @@ async function DogBreedViewer() {
 
     return <DogBreedViewerClientComponent breeds={Object.keys(breeds.message)} />;
 }
-export default async function WithSuspenseServerComponent() {    
+export default async function Page() {    
 
     return (
         <Suspense fallback={(<p>Loading breeds...</p>)}>
